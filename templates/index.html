@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Player YouTube MP3</title>
+  <style>
+    /* Reset básico */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+      color: #f1f1f1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+      overflow-x: hidden;
+    }
+
+    h1 {
+      font-size: 2.5rem;
+      margin-bottom: 20px;
+      background: -webkit-linear-gradient(45deg, #1db954, #1ed760);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      text-align: center;
+    }
+
+    /* Barra de pesquisa estilizada - Glassmorphism */
+    #search-section {
+      position: sticky;
+      top: 10px;
+      width: 100%;
+      max-width: 600px;
+      margin-bottom: 30px;
+      padding: 10px 20px;
+      background: rgba(255,255,255,0.1);
+      backdrop-filter: blur(10px);
+      border-radius: 50px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+      display: flex;
+      align-items: center;
+      z-index: 100;
+      transition: transform 0.3s;
+    }
+    #search-section:hover {
+      transform: scale(1.02);
+    }
+
+    #search {
+      flex: 1;
+      padding: 12px 15px;
+      font-size: 1rem;
+      border: none;
+      outline: none;
+      background: transparent;
+      color: #f1f1f1;
+      font-weight: 500;
+    }
+    #search::placeholder {
+      color: rgba(241,241,241,0.6);
+      font-style: italic;
+    }
+
+    button#btnSearch {
+      background: linear-gradient(45deg, #1db954, #1ed760);
+      border: none;
+      padding: 12px 20px;
+      margin-left: 10px;
+      border-radius: 50px;
+      cursor: pointer;
+      font-size: 1.2rem;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+      transition: background 0.3s, transform 0.2s;
+    }
+    button#btnSearch:hover {
+      background: linear-gradient(45deg, #17a84b, #19c754);
+      transform: scale(1.1);
+    }
+
+    .tabs {
+      display: flex;
+      justify-content: center;
+      gap: 30px;
+      margin-top: 20px;
+      border-bottom: 2px solid rgba(255,255,255,0.2);
+    }
+    .tab {
+      padding: 10px 20px;
+      cursor: pointer;
+      position: relative;
+      font-weight: 600;
+      color: #bbb;
+      transition: color 0.3s;
+    }
+    .tab.active,
+    .tab:hover {
+      color: #fff;
+    }
+    .tab.active::after {
+      content: '';
+      position: absolute;
+      bottom: -2px;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: #1db954;
+      border-radius: 2px 2px 0 0;
+    }
+
+    .tab-content {
+      width: 100%;
+      max-width: 600px;
+      margin-top: 20px;
+      display: none;
+    }
+    .tab-content.active {
+      display: block;
+    }
+
+    .item {
+      display: flex;
+      align-items: center;
+      background: rgba(255,255,255,0.05);
+      border-radius: 12px;
+      padding: 12px;
+      margin-bottom: 14px;
+      transition: background 0.2s, transform 0.2s;
+      cursor: pointer;
+    }
+    .item:hover {
+      background: rgba(255,255,255,0.1);
+      transform: translateX(5px);
+    }
+    .item img {
+      width: 70px;
+      height: 50px;
+      border-radius: 8px;
+      margin-right: 18px;
+      object-fit: cover;
+      flex-shrink: 0;
+    }
+    .item .title {
+      flex: 1;
+      font-size: 1rem;
+      font-weight: 500;
+      color: #f1f1f1;
+    }
+    .item button {
+      background: none;
+      border: none;
+      font-size: 1.3rem;
+      margin-left: 12px;
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+    .item button:hover {
+      transform: scale(1.2);
+    }
+    .btn-download { color: #1db954; }
+    .btn-fav { color: #e0245e; }
+
+    #player-container {
+      margin-top: auto;
+      width: 100%;
+      max-width: 600px;
+      background: rgba(255,255,255,0.08);
+      border-radius: 12px;
+      padding: 18px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+      margin-bottom: 20px;
+    }
+    #current-track {
+      text-align: center;
+      margin-bottom: 12px;
+      font-weight: 600;
+      color: #1ed760;
+      font-size: 1.1rem;
+    }
+    audio {
+      width: 100%;
+      outline: none;
+      border-radius: 8px;
+      background: rgba(0,0,0,0.2);
+    }
+
+    @media (max-width: 480px) {
+      #search-section { flex-direction: column; padding: 12px; }
+      button#btnSearch { margin-left: 0; margin-top: 8px; width: 100%; }
+      .tabs { flex-direction: column; gap: 12px; }
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Player YouTube MP3</h1>
+
+  <div id="search-section">
+    <input id="search" type="text" placeholder="Pesquisar músicas, artistas..." autocomplete="off" />
+    <button id="btnSearch" onclick="doSearch()">🔍</button>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="results">Resultados</div>
+    <div class="tab" data-tab="favoritos">Favoritos</div>
+    <div class="tab" data-tab="historico">Histórico</div>
+  </div>
+
+  <div id="results" class="tab-content active"></div>
+  <div id="favoritos" class="tab-content"></div>
+  <div id="historico" class="tab-content"></div>
+
+  <div id="player-container">
+    <div id="current-track">Nenhuma música tocando</div>
+    <audio id="player" controls></audio>
+  </div>
+
+  <script>
+    const player = document.getElementById('player');
+    const currentTrack = document.getElementById('current-track');
+    const tabs = document.querySelectorAll('.tab');
+    const contents = document.querySelectorAll('.tab-content');
+
+    tabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        tabs.forEach(t => t.classList.remove('active'));
+        contents.forEach(c => c.classList.remove('active'));
+        tab.classList.add('active');
+        document.getElementById(tab.dataset.tab).classList.add('active');
+        if(tab.dataset.tab === 'favoritos') loadFavoritos();
+        if(tab.dataset.tab === 'historico') loadHistorico();
+      });
+    });
+
+    async function doSearch() {
+      const q = document.getElementById('search').value.trim();
+      if (!q) return alert('Digite um termo para pesquisar!');
+      try {
+        const res = await fetch(`/search?q=${encodeURIComponent(q)}`);
+        const json = await res.json();
+        if (json.status === 'error') return alert(json.message);
+        const results = json.data;
+        const container = document.getElementById('results');
+        container.innerHTML = '';
+        results.forEach(item => container.appendChild(criarItem(item, false)));
+        document.querySelector('.tab[data-tab=results]').click();
+      } catch (e) {
+        alert('Erro na busca: ' + e);
+      }
+    }
+
+    function criarItem(item, isFav) {
+      const div = document.createElement('div');
+      div.className = 'item';
+      div.innerHTML = `
+        <img src="${item.thumbnail}" alt="thumb">
+        <div class="title">${item.title}</div>
+        <button class="btn-download" title="Download">⬇️</button>
+        <button class="btn-fav" title="${isFav ? 'Remover Favorito' : 'Adicionar Favorito'}">❤️</button>
+      `;
+      div.querySelector('.btn-download').addEventListener('click', e => {
+        e.stopPropagation();
+        window.open(`/download?video_id=${item.id}`, '_blank');
+      });
+      div.querySelector('.btn-fav').addEventListener('click', async e => {
+        e.stopPropagation();
+        if (isFav) { await fetch('/favoritos', { method: 'DELETE', headers: {'Content-Type':'application/json'}, body: JSON.stringify({id: item.id}) }); loadFavoritos(); } 
+        else { await fetch('/favoritos', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(item) }); alert('Adicionado aos favoritos!'); }
+      });
+      div.addEventListener('click', () => playAudio(item.id, item.title));
+      return div;
+    }
+
+    async function playAudio(id, title) {
+      try {
+        const res = await fetch(`/audio_url?video_id=${id}&title=${encodeURIComponent(title)}`);
+        const json = await res.json();
+        if (json.status === 'error') return alert(json.message);
+        const { audio_url, title: t } = json.data;
+        player.src = audio_url; currentTrack.textContent = `Tocando agora: ${t}`; player.play();
+      } catch (e) { alert('Erro ao tocar áudio: ' + e); }
+    }
+
+    async function loadFavoritos() {
+      const res = await fetch('/favoritos'); const json = await res.json(); if (json.status === 'error') return alert(json.message);
+      const favs = json.data; const container = document.getElementById('favoritos'); container.innerHTML = favs.length ? '' : '<p>Você não tem favoritos.</p>';
+      favs.forEach(item => container.appendChild(criarItem(item, true)));
+    }
+
+    async function loadHistorico() {
+      const res = await fetch('/historico'); const json = await res.json(); if (json.status === 'error') return alert(json.message);
+      const hist = json.data; const container = document.getElementById('historico'); container.innerHTML = hist.length ? '' : '<p>Nenhuma música tocada.</p>';
+      hist.forEach(itemData => {
+        const item = {
+            id: itemData.id,
+            title: itemData.title,
+            thumbnail: `https://img.youtube.com/vi/${itemData.id}/hqdefault.jpg`
+        };
+        container.appendChild(criarItem(item, false));
+      });
+    }
+
+    document.getElementById('search').addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+  </script>
+
+</body>
+</html>
+
