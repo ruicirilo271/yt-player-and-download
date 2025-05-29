@@ -1,4 +1,5 @@
 Flask
+gunicorn
 yt-dlp
-requests
 python-dotenv
+requests
