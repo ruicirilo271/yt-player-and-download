@@ -8,42 +8,39 @@ from dotenv import load_dotenv
 load_dotenv()
 YOUTUBE_API_KEY = os.getenv('YOUTUBE_API_KEY')
 if not YOUTUBE_API_KEY:
-    raise RuntimeError("Defina a variável de ambiente YOUTUBE_API_KEY no seu .env")
+    raise RuntimeError("Defina a variável YOUTUBE_API_KEY no .env")
 
 # Pasta de downloads
 DOWNLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'downloads')
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
-# Caminho do ficheiro de cookies
-COOKIES_FILE = '/tmp/cookies.txt'
+# Caminho dos cookies (coloca cookies.txt nesta pasta)
+COOKIES_FILE = os.path.join(os.path.dirname(__file__), 'cookies.txt')
+if not os.path.exists(COOKIES_FILE):
+    print("⚠️ cookies.txt não encontrado. Algumas músicas podem falhar.")
 
-# Configuração do Flask
+# Configurações do Flask
 app = Flask(__name__, static_folder='static', template_folder='templates')
 
-# Opções yt_dlp
+# yt-dlp opções com cookies
 ydl_stream_opts = {
     'format': 'bestaudio/best',
     'quiet': True,
     'no_warnings': True,
     'skip_download': True,
+    'cookiefile': COOKIES_FILE
 }
 ydl_download_opts = {
     'format': 'bestaudio/best',
     'quiet': True,
     'no_warnings': True,
+    'cookiefile': COOKIES_FILE,
     'outtmpl': os.path.join(DOWNLOAD_FOLDER, '%(id)s.%(ext)s'),
 }
 
-# Se cookies existirem, usar
-if os.path.exists(COOKIES_FILE):
-    ydl_stream_opts['cookiefile'] = COOKIES_FILE
-    ydl_download_opts['cookiefile'] = COOKIES_FILE
-
-# Dados em memória
+# Memória em tempo de execução
 favoritos = []
 historico = []
-
-YOUTUBE_SEARCH_URL = 'https://www.googleapis.com/youtube/v3/search'
 
 # --- Funções auxiliares ---
 
@@ -55,19 +52,18 @@ def youtube_search(query, max_results=15):
         'type': 'video',
         'maxResults': max_results,
     }
-    resp = requests.get(YOUTUBE_SEARCH_URL, params=params)
-    resp.raise_for_status()
-    data = resp.json()
+    r = requests.get('https://www.googleapis.com/youtube/v3/search', params=params)
+    r.raise_for_status()
     return [
         {
             'id': item['id']['videoId'],
             'title': item['snippet']['title'],
             'thumbnail': item['snippet']['thumbnails']['default']['url'],
         }
-        for item in data.get('items', [])
+        for item in r.json().get('items', [])
     ]
 
-# --- Rotas ---
+# --- Rotas Flask ---
 
 @app.route('/')
 def index():
@@ -80,9 +76,9 @@ def search():
         return jsonify({'status': 'error', 'message': 'Termo de pesquisa obrigatório'}), 400
     try:
         results = youtube_search(q)
-    except requests.HTTPError as e:
-        return jsonify({'status': 'error', 'message': f'Erro na API do YouTube: {e}'}), 500
-    return jsonify({'status': 'success', 'data': results})
+        return jsonify({'status': 'success', 'data': results})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/audio_url')
 def audio_url():
@@ -96,11 +92,10 @@ def audio_url():
         with YoutubeDL(ydl_stream_opts) as ydl:
             info = ydl.extract_info(url, download=False)
             audio_url = info['url']
+            historico.append({'id': video_id, 'title': title or info.get('title', '')})
+            return jsonify({'status': 'success', 'data': {'audio_url': audio_url}})
     except Exception as e:
         return jsonify({'status': 'error', 'message': f'Erro ao obter áudio: {e}'}), 500
-
-    historico.append({'id': video_id, 'title': title or info.get('title', '')})
-    return jsonify({'status': 'success', 'data': {'audio_url': audio_url, 'title': title}})
 
 @app.route('/download')
 def download():
@@ -113,57 +108,31 @@ def download():
         with YoutubeDL(ydl_download_opts) as ydl:
             info = ydl.extract_info(url, download=True)
             filepath = ydl.prepare_filename(info)
+            filename = f"{info.get('title', video_id)}.mp3"
+            return send_file(filepath, as_attachment=True, download_name=filename, mimetype='audio/mpeg')
     except Exception as e:
         abort(500, f'Erro ao baixar áudio: {e}')
-
-    filename = f"{info.get('title', video_id)}.mp3"
-    return send_file(
-        filepath,
-        as_attachment=True,
-        download_name=filename,
-        mimetype='audio/mpeg'
-    )
 
 @app.route('/favoritos', methods=['GET', 'POST', 'DELETE'])
 def manage_favoritos():
     if request.method == 'GET':
         return jsonify({'status': 'success', 'data': favoritos})
-
     data = request.get_json()
     if not data:
         return jsonify({'status': 'error', 'message': 'Dados JSON esperados'}), 400
-
     if request.method == 'POST':
         if data not in favoritos:
             favoritos.append(data)
-        return jsonify({'status': 'success', 'message': 'Adicionado aos favoritos'})
-
+        return jsonify({'status': 'success'})
     if request.method == 'DELETE':
-        vid = data.get('id')
-        if not vid:
-            return jsonify({'status': 'error', 'message': 'id é obrigatório para remover'}), 400
-        favoritos[:] = [f for f in favoritos if f.get('id') != vid]
-        return jsonify({'status': 'success', 'message': 'Removido dos favoritos'})
+        favoritos[:] = [f for f in favoritos if f.get('id') != data.get('id')]
+        return jsonify({'status': 'success'})
 
 @app.route('/historico')
 def get_historico():
-    data = historico[-20:][::-1]
-    return jsonify({'status': 'success', 'data': data})
+    return jsonify({'status': 'success', 'data': historico[-20:][::-1]})
 
-@app.route('/upload_cookies', methods=['POST'])
-def upload_cookies():
-    file = request.files.get('file')
-    if not file or not file.filename.endswith('.txt'):
-        return jsonify({'status': 'error', 'message': 'Envie um ficheiro .txt com cookies'}), 400
-
-    try:
-        file.save(COOKIES_FILE)
-        return jsonify({'status': 'success', 'message': 'Cookies guardados com sucesso'})
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': f'Erro ao guardar cookies: {e}'}), 500
-
-# --- Inicialização ---
-
+# --- Execução ---
 if __name__ == '__main__':
     app.run(debug=True)
 
