@@ -11,7 +11,8 @@ if not YOUTUBE_API_KEY:
     raise RuntimeError("Defina a variável de ambiente YOUTUBE_API_KEY no seu .env")
 
 # Caminho dos cookies
-COOKIES_FILE = os.path.join(os.path.dirname(__file__), 'cookies.txt')
+COOKIES_FILE = '/tmp/cookies.txt'
+
 
 # Cria pasta de downloads se não existir
 DOWNLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'downloads')
