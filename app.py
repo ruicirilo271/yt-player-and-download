@@ -1,5 +1,5 @@
 import os
-from flask import Flask, render_template, request, jsonify, send_file, abort, Response
+from flask import Flask, render_template, request, jsonify, send_file, abort
 from yt_dlp import YoutubeDL
 import requests
 from dotenv import load_dotenv
@@ -10,11 +10,14 @@ YOUTUBE_API_KEY = os.getenv('YOUTUBE_API_KEY')
 if not YOUTUBE_API_KEY:
     raise RuntimeError("Defina a variável de ambiente YOUTUBE_API_KEY no seu .env")
 
-# Cria pasta de downloads se não existir
+# Pasta de downloads
 DOWNLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'downloads')
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
-# Configurações do Flask
+# Caminho do ficheiro de cookies
+COOKIES_FILE = '/tmp/cookies.txt'
+
+# Configuração do Flask
 app = Flask(__name__, static_folder='static', template_folder='templates')
 
 # Opções yt_dlp
@@ -31,11 +34,15 @@ ydl_download_opts = {
     'outtmpl': os.path.join(DOWNLOAD_FOLDER, '%(id)s.%(ext)s'),
 }
 
-# Listas em memória (favoritos e histórico)
+# Se cookies existirem, usar
+if os.path.exists(COOKIES_FILE):
+    ydl_stream_opts['cookiefile'] = COOKIES_FILE
+    ydl_download_opts['cookiefile'] = COOKIES_FILE
+
+# Dados em memória
 favoritos = []
 historico = []
 
-# URLs da API YouTube
 YOUTUBE_SEARCH_URL = 'https://www.googleapis.com/youtube/v3/search'
 
 # --- Funções auxiliares ---
@@ -92,7 +99,6 @@ def audio_url():
     except Exception as e:
         return jsonify({'status': 'error', 'message': f'Erro ao obter áudio: {e}'}), 500
 
-    # Registra no histórico
     historico.append({'id': video_id, 'title': title or info.get('title', '')})
     return jsonify({'status': 'success', 'data': {'audio_url': audio_url, 'title': title}})
 
@@ -141,11 +147,23 @@ def manage_favoritos():
 
 @app.route('/historico')
 def get_historico():
-    # últimos 20, invertidos
     data = historico[-20:][::-1]
     return jsonify({'status': 'success', 'data': data})
+
+@app.route('/upload_cookies', methods=['POST'])
+def upload_cookies():
+    file = request.files.get('file')
+    if not file or not file.filename.endswith('.txt'):
+        return jsonify({'status': 'error', 'message': 'Envie um ficheiro .txt com cookies'}), 400
+
+    try:
+        file.save(COOKIES_FILE)
+        return jsonify({'status': 'success', 'message': 'Cookies guardados com sucesso'})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': f'Erro ao guardar cookies: {e}'}), 500
 
 # --- Inicialização ---
 
 if __name__ == '__main__':
     app.run(debug=True)
+
