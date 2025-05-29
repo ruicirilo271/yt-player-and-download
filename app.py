@@ -1,5 +1,5 @@
 import os
-from flask import Flask, render_template, request, jsonify, send_file, abort, Response
+from flask import Flask, render_template, request, jsonify, send_file, abort
 from yt_dlp import YoutubeDL
 import requests
 from dotenv import load_dotenv
@@ -9,6 +9,9 @@ load_dotenv()
 YOUTUBE_API_KEY = os.getenv('YOUTUBE_API_KEY')
 if not YOUTUBE_API_KEY:
     raise RuntimeError("Defina a variável de ambiente YOUTUBE_API_KEY no seu .env")
+
+# Caminho dos cookies
+COOKIES_FILE = os.path.join(os.path.dirname(__file__), 'cookies.txt')
 
 # Cria pasta de downloads se não existir
 DOWNLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'downloads')
@@ -30,6 +33,11 @@ ydl_download_opts = {
     'no_warnings': True,
     'outtmpl': os.path.join(DOWNLOAD_FOLDER, '%(id)s.%(ext)s'),
 }
+
+# Adiciona cookies se o arquivo existir
+if os.path.exists(COOKIES_FILE):
+    ydl_stream_opts['cookiefile'] = COOKIES_FILE
+    ydl_download_opts['cookiefile'] = COOKIES_FILE
 
 # Listas em memória (favoritos e histórico)
 favoritos = []
@@ -90,9 +98,11 @@ def audio_url():
             info = ydl.extract_info(url, download=False)
             audio_url = info['url']
     except Exception as e:
-        return jsonify({'status': 'error', 'message': f'Erro ao obter áudio: {e}'}), 500
+        msg = str(e)
+        if 'Sign in to confirm' in msg or 'captcha' in msg.lower():
+            return jsonify({'status': 'error', 'message': 'YouTube exige login. Adicione cookies.txt na raiz do projeto.'}), 403
+        return jsonify({'status': 'error', 'message': f'Erro ao obter áudio: {msg}'}), 500
 
-    # Registra no histórico
     historico.append({'id': video_id, 'title': title or info.get('title', '')})
     return jsonify({'status': 'success', 'data': {'audio_url': audio_url, 'title': title}})
 
@@ -108,7 +118,10 @@ def download():
             info = ydl.extract_info(url, download=True)
             filepath = ydl.prepare_filename(info)
     except Exception as e:
-        abort(500, f'Erro ao baixar áudio: {e}')
+        msg = str(e)
+        if 'Sign in to confirm' in msg or 'captcha' in msg.lower():
+            abort(403, 'YouTube exige login. Adicione cookies.txt na raiz do projeto.')
+        abort(500, f'Erro ao baixar áudio: {msg}')
 
     filename = f"{info.get('title', video_id)}.mp3"
     return send_file(
@@ -141,9 +154,12 @@ def manage_favoritos():
 
 @app.route('/historico')
 def get_historico():
-    # últimos 20, invertidos
     data = historico[-20:][::-1]
     return jsonify({'status': 'success', 'data': data})
+
+# --- Inicialização ---
+if __name__ == '__main__':
+    app.run(debug=True)
 
 # --- Inicialização ---
 
